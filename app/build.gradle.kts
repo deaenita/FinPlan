@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
+    kotlin("kapt")
+
 }
 
 android {
@@ -72,5 +74,20 @@ dependencies {
     implementation("androidx.compose.material:material:1.3.0")
     implementation("androidx.compose.ui:ui-tooling-preview:1.3.0")
     implementation("androidx.navigation:navigation-compose:2.5.3")
+    implementation("io.coil-kt:coil-compose:2.1.0")
+    implementation("com.google.accompanist:accompanist-webview:0.24.7-alpha")
+    implementation("com.google.accompanist:accompanist-webview:0.28.0")
+    // Room
+    implementation("androidx.room:room-runtime:2.6.1")
+    annotationProcessor("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.compose.material:material:1.0.5")
+
+    //kapt("androidx.room:room-compiler:2.6.1")
+
+    // Coroutines
+    implementation("androidx.room:room-ktx:2.6.1")
+
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.4.0")
+
 
 }

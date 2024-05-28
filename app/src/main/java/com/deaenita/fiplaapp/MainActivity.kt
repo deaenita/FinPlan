@@ -1,6 +1,7 @@
 package com.deaenita.fiplaapp
 
 import android.os.Bundle
+import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
@@ -9,8 +10,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
@@ -36,14 +39,29 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.*
 import com.deaenita.fiplaapp.ui.theme.FiplaAppTheme
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Fastfood
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.runtime.Composable
-
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.room.Room
+import com.deaenita.fiplaapp.database.AppDatabase
+import com.google.accompanist.web.WebView
+import com.google.accompanist.web.rememberWebViewState
+import androidx.compose.foundation.lazy.items
 
 
 class MainActivity : ComponentActivity() {
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+
         setContent {
             FiplaAppTheme {
                 MainScreen()
@@ -98,10 +116,14 @@ fun BottomNavigationBar(navController: NavHostController) {
 
 @Composable
 fun NavigationGraph(navController: NavHostController, paddingValues: PaddingValues) {
-    NavHost(navController, startDestination = BottomNavItem.Dompet.route) {
-        composable(BottomNavItem.Dompet.route) { DompetScreen(navController, paddingValues) }
+    NavHost(
+        navController, startDestination = BottomNavItem.Dompet.route) {
+        composable(BottomNavItem.Dompet.route) { DompetScreen(navController
+            ) }
         composable(BottomNavItem.Plan.route) { PlanScreen(navController, paddingValues) }
         composable(BottomNavItem.Akun.route) { AkunScreen(navController, paddingValues) }
+        composable("webview") { WebViewScreen("https://mediakeuangan.kemenkeu.go.id/article/show/7-tips-mengatur-keuangan-agar-tabunganmu-terus-bertambah") }
+
     }
 }
 
@@ -109,17 +131,17 @@ fun NavigationGraph(navController: NavHostController, paddingValues: PaddingValu
 @Composable
 fun PlanScreen(navController: NavHostController, paddingValues: PaddingValues) {
     Box(modifier = Modifier.padding(paddingValues)) {
-
         var showDialog by remember { mutableStateOf(false) }
         var selectedCategory by remember { mutableStateOf(Category.JAJAN) }
         var amount by remember { mutableStateOf("") }
         var description by remember { mutableStateOf("") }
+        var plans by remember { mutableStateOf(emptyList<Plan>()) }
 
-        Column (
+        Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Bottom,
             horizontalAlignment = Alignment.End
-        ){
+        ) {
             FloatingActionButton(
                 onClick = { showDialog = true },
                 shape = CircleShape,
@@ -131,10 +153,10 @@ fun PlanScreen(navController: NavHostController, paddingValues: PaddingValues) {
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Add Plan",
-                    modifier = Modifier.size(24.dp))
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
-
 
         if (showDialog) {
             AlertDialog(
@@ -164,7 +186,8 @@ fun PlanScreen(navController: NavHostController, paddingValues: PaddingValues) {
                 confirmButton = {
                     Button(
                         onClick = {
-                            // Lakukan sesuatu dengan data pengeluaran
+                            val newPlan = Plan(description, amount, selectedCategory)
+                            plans = plans + newPlan
                             showDialog = false
                         }
                     ) {
@@ -180,36 +203,113 @@ fun PlanScreen(navController: NavHostController, paddingValues: PaddingValues) {
                 }
             )
         }
+
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(8.dp)
+            ) {
+                items(plans) { plan ->
+                    PlanCard(plan = plan)
+                }
+            }
+        }
+    }
+}
+@Composable
+fun PlanCard(plan: Plan) {
+    Card(
+        backgroundColor = MaterialTheme.colors.surface,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        elevation = 4.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 8.dp)
+            ) {
+                Icon(
+                    imageVector = getCategoryIcon(plan.category),
+                    contentDescription = "Category Icon",
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colors.primary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = plan.description,
+                    style = MaterialTheme.typography.h6,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Text(
+                text = "Jumlah: Rp${plan.amount}",
+                style = MaterialTheme.typography.body1
+            )
+            Text(
+                text = "Kategori: ${plan.category}",
+                style = MaterialTheme.typography.body2,
+                color = Color.Gray
+            )
+        }
     }
 }
 
 @Composable
 fun CategorySelector(selectedCategory: Category, onCategorySelected: (Category) -> Unit) {
+    val categories = Category.values().toList()
+
     Row(
-        modifier = Modifier.padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceAround,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
     ) {
-        Category.values().forEach { category ->
-            Button(
-                onClick = { onCategorySelected(category) },
-                colors = ButtonDefaults.buttonColors(
-                    backgroundColor = if (selectedCategory == category) MaterialTheme.colors.primary else MaterialTheme.colors.surface
-                ),
-                modifier = Modifier.wrapContentWidth()
+        categories.forEach { category ->
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.clickable { onCategorySelected(category) }
             ) {
-                Text(category.displayName)
+                Icon(
+                    imageVector = getCategoryIcon(category),
+                    contentDescription = "Category Icon",
+                    modifier = Modifier
+                        .size(40.dp)
+                        .padding(4.dp),
+                    tint = if (category == selectedCategory) MaterialTheme.colors.primary else Color.Gray
+                )
+                Text(
+                    text = category.name,
+                    style = MaterialTheme.typography.caption,
+                    color = if (category == selectedCategory) MaterialTheme.colors.primary else Color.Gray
+                )
             }
         }
     }
 }
 
 
-enum class Category(val displayName: String) {
-    JAJAN("Internet"),
-    BELANJA("Belanja"),
-    LISTRIK("Listrik"),
+fun getCategoryIcon(category: Category): ImageVector {
+    return when (category) {
+        Category.JAJAN -> Icons.Default.Fastfood
+        Category.BELANJA -> Icons.Default.ShoppingCart
+        Category.RUMAH -> Icons.Default.Home
+        Category.LAINNYA -> Icons.Default.EmojiEvents
+    }
 }
+
+enum class Category {
+    JAJAN, BELANJA, RUMAH, LAINNYA
+}
+
+
+
 
 
 
@@ -218,20 +318,110 @@ fun AkunScreen(navController: NavHostController, paddingValues: PaddingValues) {
     Scaffold(
         content = { innerPadding ->
             Column(
-                modifier = Modifier.padding(innerPadding) // Apply the innerPadding provided by Scaffold
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .fillMaxSize()
+                    //.verticalScroll(ScrollState(1))
             ) {
-                Text(text = "Rekap Keuangan", style = MaterialTheme.typography.h6, modifier = Modifier.padding(16.dp))
-                FinanceChart(
-                    financialData = listOf(
-                        4000f, 4500f, 3000f, 5000f, 4800f, 4700f, 5000f, 5300f, 4900f, 5100f, 5200f, 4800f
-                    ),
-                    months = listOf(
-                        "Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"
-                    ),
-                )
+                UserProfileSection()
+                SettingsSection()
+                TransactionHistorySection()
             }
         }
     )
+}
+
+@Composable
+fun UserProfileSection() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(0.dp)
+            .background(color = Color.LightGray)
+    ) {
+        Spacer(modifier = Modifier.height(16.dp))
+        Card(
+            shape = CircleShape,
+            elevation = 4.dp,
+            modifier = Modifier.size(100.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Gray)
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(text = "Nama Pengguna", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Text(text = "user@example.com", fontSize = 16.sp)
+        Spacer(modifier = Modifier.height(16.dp))
+
+    }
+}
+
+@Composable
+fun SettingsSection() {
+    Column(modifier = Modifier.padding(16.dp)) {
+        SettingItem(title = "Ubah Profil")
+        SettingItem(title = "Keamanan dan Privasi")
+        SettingItem(title = "Notifikasi")
+        SettingItem(title = "Bahasa")
+    }
+}
+
+@Composable
+fun SettingItem(title: String) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+        //.clickable { navController.navigate(route) }
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(text = title, fontSize = 16.sp)
+            //Icon(imageVector = Icons.Default.ArrowForward, contentDescription = null)
+        }
+    }
+}
+
+@Composable
+fun TransactionHistorySection() {
+    Column(modifier = Modifier.padding(16.dp)) {
+        Text(text = "Riwayat Transaksi", style = MaterialTheme.typography.h6)
+        Spacer(modifier = Modifier.height(8.dp))
+
+        TransactionItem(description = "Pembelian di Tokopedia", amount = "-Rp 200.000", date = "25 Mei 2024")
+        TransactionItem(description = "Gaji Bulanan", amount = "+Rp 5.000.000", date = "30 Mei 2024")
+    }
+    Spacer(modifier = Modifier.height(48.dp))
+
+}
+
+@Composable
+fun TransactionItem(description: String, amount: String, date: String) {
+    Card(
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp)
+    ) {
+        Column (
+            modifier = Modifier
+                .padding(8.dp)
+        ){
+            Text(text = description, fontWeight = FontWeight.Bold)
+            Text(text = amount, color = if (amount.startsWith("-")) Color.Red else Color.Green)
+            Text(text = date, fontSize = 12.sp)
+        }
+    }
+
 }
 
 @Composable
@@ -245,14 +435,50 @@ enum class BottomNavItem(val route: String, val icon: ImageVector, val title: St
     Plan("plan", Icons.Filled.List, "Plan"),
     Akun("akun", Icons.Filled.Person, "Akun")
 }
-
 @Composable
-fun DompetScreen(navController: NavHostController, paddingValues: PaddingValues) {
+fun DompetScreen(navController: NavHostController) {
+    var showDialog by remember { mutableStateOf(false) }
+    var selectedAction by remember { mutableStateOf<String?>(null) }
+
+    val choices = listOf("Input Pemasukan", "Input Pengeluaran")
+
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Bottom,
+        horizontalAlignment = Alignment.End
+    ) {
+        FloatingActionButton(
+            onClick = { showDialog = true },
+            shape = CircleShape,
+            modifier = Modifier
+                .padding(16.dp)
+                .padding(end = 30.dp)
+                .padding(bottom = 70.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Add Record",
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
     Column(
         modifier = Modifier
-            .padding(paddingValues)
-            .padding(horizontal = 16.dp)
+        //.padding(paddingValues)
+        //.padding(horizontal = 16.dp)
     ) {
+        Image(
+            painter = painterResource(id = R.drawable.mytipsaturkeuangan),
+            contentDescription = "Example Image",
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .clickable {
+                    navController.navigate("webview")
+                }
+        )
+
         Box( // Wrap FinanceCard with Box
             modifier = Modifier
                 .padding(vertical = 16.dp)
@@ -264,17 +490,186 @@ fun DompetScreen(navController: NavHostController, paddingValues: PaddingValues)
                 expenses = "Pengeluaran: Rp 3.000.000"
             )
         }
+
+        Scaffold(
+            content = { innerPadding ->
+                Column(
+                    modifier = Modifier.padding(innerPadding) // Apply the innerPadding provided by Scaffold
+                ) {
+                    Text(text = "Rekap Keuangan Bulanan", style = MaterialTheme.typography.body1, modifier = Modifier.padding(16.dp))
+                    FinanceChart(
+                        financialData = listOf(
+                            40f, 45f, 30f, 50f, 48f, 47f, 50f, 53f, 49f, 51f, 15f, 48f
+                        ),
+                        months = listOf(
+                            "Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"
+                        ),
+                    )
+                }
+            }
+        )
+
+        if (showDialog) {
+            AlertDialog(
+                onDismissRequest = { showDialog = false },
+                title = {
+                    Text("Pilih Tindakan")
+                },
+                text = {
+                    Column {
+                        choices.forEach { choice ->
+                            Button(
+                                onClick = {
+                                    showDialog = false
+                                    selectedAction = choice
+                                },
+                                modifier = Modifier
+                                    .padding(8.dp)
+                                    .fillMaxWidth()
+                            ) {
+                                Text(choice)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { showDialog = false },
+                        modifier = Modifier.padding(8.dp)
+                    ) {
+                        Text("Batal")
+                    }
+                }
+            )
+        }
+
+        selectedAction?.let { action ->
+            when (action) {
+                "Input Pemasukan" -> showIncomeDialog(navController)
+                "Input Pengeluaran" -> showExpenseDialog(navController)
+            }
+        }
+    }
+}
+
+
+@Composable
+fun showIncomeDialog(navController: NavHostController) {
+    var title by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var showDialog by remember { mutableStateOf(true) }
+
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = {
+                Text("Input Pemasukan")
+            },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("Tittle") }
+                    )
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it },
+                        label = { Text("Jumlah (Rp)") }
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // Lakukan sesuatu dengan data pemasukan
+                        if (title.isNotEmpty() && amount.isNotEmpty()) {
+                            //viewModel.addIncome(title, amount)
+                            showDialog = false
+                        }
+                    },
+                    modifier = Modifier.padding(8.dp)
+                ) {
+                    Text("Tambahkan")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { showDialog = false }
+                ) {
+                    Text("Batal")
+                }
+            }
+        )
     }
 }
 
 @Composable
-fun FinanceChart(financialData: List<Float>, months: List<String>
+fun showExpenseDialog(navController: NavHostController) {
+    var title by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var showDialog by remember { mutableStateOf(true) }
+
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = {
+                Text("Input Pengeluaran")
+            },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("Tittle") }
+                    )
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it },
+                        label = { Text("Jumlah (Rp)") }
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // Lakukan sesuatu dengan data pengeluaran
+                        if (title.isNotEmpty() && amount.isNotEmpty()) {
+                            // Lakukan sesuatu dengan data pengeluaran
+                            showDialog = false
+                        }
+                    },
+                    modifier = Modifier.padding(8.dp)
+                ) {
+                    Text("Tambahkan")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { showDialog = false }
+                ) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
+}
+
+
+
+
+
+@Composable
+fun FinanceChart(
+    financialData: List<Float>,
+    months: List<String>,
+    height: Dp = 300.dp // Default height if not specified
 ) {
     val maxValue = financialData.maxOrNull() ?: 0f
 
     Canvas(modifier = Modifier
         .fillMaxWidth()
-        .height(300.dp)
+        .height(200.dp) // Use the height parameter here
         .padding(16.dp)
         .background(Color.LightGray, shape = RoundedCornerShape(8.dp))) {
         val barWidth = (size.width - 32.dp.toPx()) / financialData.size
@@ -310,6 +705,18 @@ fun FinanceChart(financialData: List<Float>, months: List<String>
         }
     }
 }
+@Composable
+fun WebViewScreen(url: String) {
+    val state = rememberWebViewState(url = url)
+    WebView(
+        state = state,
+        modifier = Modifier.fillMaxSize(),
+        onCreated = { webView ->
+            webView.webViewClient = WebViewClient()
+        }
+    )
+}
+
 
 @Composable
 fun FinanceCard(financialPlan: String, income: String, expenses: String) {
@@ -329,6 +736,11 @@ fun FinanceCard(financialPlan: String, income: String, expenses: String) {
         }
     }
 }
+
+//pie chart
+
+
+
 
 @Preview(showBackground = true)
 @Composable
